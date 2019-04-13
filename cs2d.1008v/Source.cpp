@@ -1,111 +1,144 @@
+#include "stdafx.h"
+#pragma comment(lib,"OpenGL32.lib")
 #include <Windows.h>
 #include <iostream>
 #include "Hooks.h"
 #include <math.h>
 #include <vector>
+#include "Menu.h"
+#include "Structs.h"
+
+#define MENU_FONT_HEIGHT 15
 
 DWORD xposAddy;
-
 DWORD moduleBase;
-
 DWORD inMatchModule;
-
 DWORD screenWidthA;
 DWORD screenHeightA;
 int screenWidth;
 int screenHeight;
 
-struct enemyEntity
-{
-	DWORD baseAdress;
+bool aim = false;
+bool esp = false;
+bool menuSt = true;
 
-	DWORD xPosA;
-	DWORD yPosA;
-
-	float xPos;
-	float yPos;
-
-	DWORD teamA;
-	int team;
-
-	DWORD isLiveA;
-	int isLive;
-
-	DWORD isQuitA;
-	int isQuit;
-
-	DWORD inMatchA;
-	float inMatch;
-	float prevInMatch;
-	int eqCount = 0;
-};
-
-struct player
-{
-	DWORD baseAdress;
-
-	DWORD xPosA;
-	DWORD yPosA;
-
-	float xPos;
-	float yPos;
-
-	DWORD teamA;
-	int team;
-
-	DWORD isLiveA;
-	int isLive;
-
-	DWORD isQuitA;
-	int isQuit;
-
-} Player;
-
-struct screen
-{
-	DWORD mouseX;
-	DWORD mouseY;
-	DWORD baseAdress;
-} Screen;
 
 typedef enemyEntity EnemyEntity;
-
-bool isExist(std::vector<EnemyEntity> v, DWORD s);
-
 std::vector<EnemyEntity> enemies;
 
-bool aim = false;
+bool isExist(std::vector<EnemyEntity> v, DWORD s);
+void Render();
+
+twglSwapBuffers owglSwapBuffers;
+
+void DisableFlashEffect()
+{
+	DWORD OldProtection = NULL;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACA9D), 1, PAGE_EXECUTE_READWRITE, &OldProtection);
+	*reinterpret_cast<PBYTE>(0x005ACA9D) = 0xE9;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACA9D), 1, OldProtection, &OldProtection);
+
+	OldProtection = NULL;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACA9E), 1, PAGE_EXECUTE_READWRITE, &OldProtection);
+	*reinterpret_cast<PBYTE>(0x005ACA9E) = 0x6E;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACA9E), 1, OldProtection, &OldProtection);
+
+	OldProtection = NULL;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACA9F), 1, PAGE_EXECUTE_READWRITE, &OldProtection);
+	*reinterpret_cast<PBYTE>(0x005ACA9F) = 0x02;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACA9F), 1, OldProtection, &OldProtection);
+
+	OldProtection = NULL;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACAA0), 1, PAGE_EXECUTE_READWRITE, &OldProtection);
+	*reinterpret_cast<PBYTE>(0x005ACAA0) = 0x00;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACAA0), 1, OldProtection, &OldProtection);
+
+	OldProtection = NULL;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACAA1), 1, PAGE_EXECUTE_READWRITE, &OldProtection);
+	*reinterpret_cast<PBYTE>(0x005ACAA1) = 0x00;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACAA1), 1, OldProtection, &OldProtection);
+
+	OldProtection = NULL;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACAA2), 1, PAGE_EXECUTE_READWRITE, &OldProtection);
+	*reinterpret_cast<PBYTE>(0x005ACAA2) = 0x90;
+	VirtualProtect(reinterpret_cast<void*>(0x005ACAA2), 1, OldProtection, &OldProtection);
+}
+
+BOOL _stdcall SwapBuffersHook(HDC hDC)
+{
+	Render();
+	return owglSwapBuffers(hDC);
+}
+
+
 void InitiateHooks()
 {
 	xposAddy = FindPattern("cs2d.exe", "\x9E\x0F\x97\xC0\x0F\xB6\xC0\x83\xF8\x00\x0F\x85\x00\x00\x00\x00\xD9\x05\x00\x00\x00\x00\xD9\x9F\x00\x00\x00\x00\x8B\x87\x00\x00\x00\x00", "xxxxxxxxxxxx????xx????xx????xx????");
 	xposAddy += 0x1C; //5 bytes = jmp instruction + 4 bytes for a 4byte address
-	deathJmpBack = xposAddy + 0x6; 
-	PlaceJMP((BYTE*)xposAddy, (DWORD)getDeath, 6);
-
+	xJmpBack = xposAddy + 0x6;
+	PlaceJMP((BYTE*)xposAddy, (DWORD)getEnemyBase, 6);
 	moduleBase = getModuleBase("cs2d.exe");
+	DisableFlashEffect();
 }
 
-//This thread contains our hack loop and toggles the hacks based on key input
 DWORD WINAPI OverwriteValues()
 {
-	for (;; Sleep(30))
+	Hook("wglSwapBuffers", (uintptr_t &)owglSwapBuffers, &SwapBuffersHook);
+
+	for (;; Sleep(50))
 	{
 		if (GetAsyncKeyState(VK_HOME))
 		{
-			system("cls");
-			if (!aim)
-				std::cout << "Active!" << std::endl;
+			if (!menuSt)
+			{
+				//std::cout << "Menu Active!" << std::endl;
+			}
+
 			else
-				std::cout << "Deactive!" << std::endl;
+			{
+				//std::cout << "Menu Deactive!" << std::endl;
+			}
+			menuSt = !menuSt;
+			Sleep(100);
+		}
+
+		if (GetAsyncKeyState(VK_F5))
+		{
+			if (!aim)
+			{
+				menu.sAimbotStatus = "ON";
+				//std::cout << "Aim Active!" << std::endl;
+			}
+
+			else
+			{
+				menu.sAimbotStatus = "OFF";
+				//std::cout << "Aim Deactive!" << std::endl;
+			}
 			aim = !aim;
 			Sleep(100);
 		}
 
+		if (GetAsyncKeyState(VK_F6))
+		{
+			if (!esp)
+			{
+				menu.sESP = "ON";
+				//std::cout << "Esp Active!" << std::endl;
+			}
 
+			else
+			{
+				menu.sESP = "OFF";
+				//std::cout << "Esp Deactive!" << std::endl;
+			}
+			esp = !esp;
+			Sleep(100);
+		}
 
 		inMatchModule = (moduleBase + 0x3BD2A4);
 
-		if (*(int *)inMatchModule == 0) 
+		if (*(int *)inMatchModule == 0)
 		{
 			if (enemies.size() > 0)
 				enemies.clear();
@@ -127,8 +160,8 @@ DWORD WINAPI OverwriteValues()
 		//std::cout << "width: " << screenWidth << " --- height: " << screenHeight << std::endl;
 
 
-		Player.teamA = Player.baseAdress + 0x1CC;
-		Player.team = *(int*)Player.teamA;
+		Player.isLiveA = Player.baseAdress + 0x228; //int
+		Player.isLive = *(int *)Player.isLiveA; //int
 		DWORD enemyTeamA = enemyBase + 0x1CC;
 		int enemyTeam = *(int*)enemyTeamA;
 		//std::cout << "Enemy team no: " << enemyTeam << "    My Team No: " << Player.team << std::endl;
@@ -139,12 +172,8 @@ DWORD WINAPI OverwriteValues()
 			e.baseAdress = enemyBase;
 			e.teamA = enemyTeamA;
 			e.team = *(int*)e.teamA;
-			if (enemyTeam != Player.team)
-			{
-				e.prevInMatch = 1.0f;
-				enemies.push_back(e);
-				//std::cout << "dusman eklendi!  --  " << std::hex << enemyBase << std::endl;
-			}
+			e.prevInMatch = 1.0f;
+			enemies.push_back(e);
 		}
 
 		if (enemies.size() > 0)
@@ -168,41 +197,37 @@ DWORD WINAPI OverwriteValues()
 
 				if (enemies[i].inMatch == enemies[i].prevInMatch)
 				{
-					enemies[i].eqCount++; 
+					enemies[i].eqCount++;
 				}
 
-				if (enemies[i].team == Player.team)
-				{
-					//std::cout << i << " enemy deleted: change team" << std::endl;
-					enemies.erase(enemies.begin() + i);
-					if (i != enemies.size() - 1)
-						i = i - 1;
-					continue;
-				}
 
 				enemies[i].prevInMatch = enemies[i].inMatch;
 
+				enemies[i].isLiveA = enemies[i].baseAdress + 0x228; //int
+				enemies[i].isLive = *(int *)enemies[i].isLiveA; //int
+
 				Player.xPosA = Player.baseAdress + 0x1DC; //float
 				Player.yPosA = Player.baseAdress + 0x1E0; //float
-				Player.isLiveA = Player.baseAdress + 0x228; //int
-				Player.isLive = *(int *)Player.isLiveA; //int
 
 				enemies[i].xPosA = enemies[i].baseAdress + 0x1DC; //float
 				enemies[i].yPosA = enemies[i].baseAdress + 0x1E0; //float
-				enemies[i].isLiveA = enemies[i].baseAdress + 0x228; //int
-				enemies[i].isLive = *(int *)enemies[i].isLiveA; //int
+
+				Player.teamA = Player.baseAdress + 0x1CC;
+				Player.team = *(int*)Player.teamA;
+
+				//std::cout << "PLAYER TEAM: " << Player.team << std::endl;
+				enemies[i].teamA = enemies[i].baseAdress + 0x1CC; //int
+				enemies[i].team = *(int *)enemies[i].teamA; //int
 			}
 		}
 
-		if (aim && enemies.size() > 0)
+		if (enemies.size() > 0)
 		{
-			float maxLen = sqrt((screenWidth / 2) ^ 2 + (screenHeight / 2) ^ 2); //max distance 
+			float maxLen = 340282346638528859811704183484516925440.0000000000000000f; //max distance 
 			int targetIndex = 0;
-			float xDistance;
-			float yDistance;
 			for (std::vector<int>::size_type i = 0; i != enemies.size(); i++)
 			{
-				if (enemies[i].isLive != 0)
+				if (enemies[i].team == Player.team)
 				{
 					continue;
 				}
@@ -214,12 +239,13 @@ DWORD WINAPI OverwriteValues()
 				//find enemy and my pos, then calculate distance
 				Player.xPos = *(float *)Player.xPosA;
 				Player.yPos = *(float *)Player.yPosA;
+
 				enemies[i].xPos = *(float *)enemies[i].xPosA;
 				enemies[i].yPos = *(float *)enemies[i].yPosA;
 
-				xDistance = abs(enemies[i].xPos - Player.xPos);
-				yDistance = abs(enemies[i].yPos - Player.yPos);
-				float len = sqrtf(sqrtf(xDistance) + sqrtf(yDistance));
+				float xDistance = abs(enemies[i].xPos - Player.xPos);
+				float yDistance = abs(enemies[i].yPos - Player.yPos);
+				float len = sqrtf(pow(xDistance, 2) + pow(yDistance, 2));
 				if (i == 0)
 				{
 					maxLen = len;
@@ -236,8 +262,7 @@ DWORD WINAPI OverwriteValues()
 				//std::cout << "distance [" << i << "]: " << "x: " << xDistance << " --- y: " << yDistance << std::endl;
 			}
 
-			//std::cout << enemies.size() << std::endl;
-			if (abs(enemies[targetIndex].xPos - Player.xPos) <= screenWidth / 2 && abs(enemies[targetIndex].yPos - Player.yPos) <= screenHeight / 2 && Player.isLive == 0 && enemies[targetIndex].isLive == 0)
+			if (enemies[targetIndex].eqCount <= 5 && aim && Player.isLive == 0 && enemies[targetIndex].isLive == 0 && enemies[targetIndex].team != Player.team)
 			{
 				*(int *)Screen.mouseX = (screenWidth / 2) + (enemies[targetIndex].xPos - Player.xPos);
 				*(int *)Screen.mouseY = (screenHeight / 2) + (enemies[targetIndex].yPos - Player.yPos);
@@ -251,19 +276,49 @@ DWORD WINAPI OverwriteValues()
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
 {
-	// Perform actions based on the reason for calling.
 	switch (fdwReason)
 	{
 	case DLL_PROCESS_ATTACH:
-		AllocConsole();
-		freopen("CONOUT$", "w", stdout);
+		//AllocConsole();
+		//freopen("CONOUT$", "w", stdout);
 
-		//Should do InitiateHooks in the thread not in PROCESS_ATTACH...
 		InitiateHooks();
 		CreateThread(NULL, NULL, (LPTHREAD_START_ROUTINE)OverwriteValues, NULL, NULL, NULL);
 		break;
 	}
 	return TRUE;
+}
+
+
+void Render()
+{
+	HDC currentHDC = wglGetCurrentDC();
+
+	if (!font.bBuilt || currentHDC != font.hdc)
+	{
+		font.Build(MENU_FONT_HEIGHT);
+	}
+
+	SetupOrtho();
+
+	if (menuSt)
+		menu.DrawMenu();
+
+	if (esp && enemies.size() > 0 && Player.isLive == 0 && *(int *)inMatchModule != 0)
+	{
+		for (std::vector<int>::size_type i = 0; i != enemies.size(); i++)
+		{
+			if (enemies[i].isLive != 0 || enemies[i].team == Player.team || enemies[i].eqCount >= 5)
+				continue;
+			float xDistance = enemies[i].xPos - Player.xPos;
+			float yDistance = enemies[i].yPos - Player.yPos;
+
+			float enemyX = (screenWidth / 2) + ((screenWidth / 2) * (xDistance)) / 423;
+			float enemyY = (screenHeight / 2) + ((screenHeight / 2) * (yDistance)) / 270;
+
+			DrawLine(screenWidth / 2, screenHeight / 2, enemyX, enemyY, rgb::green);
+		}
+	}
 }
 
 bool isExist(std::vector<EnemyEntity> v, DWORD value)
